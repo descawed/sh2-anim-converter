@@ -1,0 +1,15 @@
+[package]
+name = "sh2-anim-converter"
+version = "0.1.0"
+authors = ["descawed <github@descawed.com>"]
+description = "A tool to convert Silent Hill 2 animation files for one character to another character"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+binrw = "0.14.1"
+clap = { version = "4.5.26", features = ["cargo"] }
+half = "2.4.1"
+nalgebra = "0.33.2"
+serde = { version = "1.0.217", features = ["derive"] }
+toml = "0.8.19"
