@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["descawed <github@descawed.com>"]
 description = "A tool to convert Silent Hill 2 animation files for one character to another character"
 edition = "2021"
+repository = "https://github.com/descawed/sh2-anim-converter"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.95"
