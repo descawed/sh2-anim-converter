@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{arg, command, value_parser};
 
 use sh2_anim_converter::animation::Animation;
@@ -34,14 +34,14 @@ fn main() -> Result<()> {
     let output_model_path = matches.get_one::<PathBuf>("OUTPUT_MODEL").unwrap();
     let output_animation_path = matches.get_one::<PathBuf>("OUTPUT_FILE").unwrap();
 
-    let schema = Schema::load(schema_path)?;
+    let schema = Schema::load(schema_path).context("schema.toml")?;
 
-    let input_skeleton = Skeleton::read_from_model(File::open(input_model_path)?)?;
-    let output_skeleton = Skeleton::read_from_model(File::open(output_model_path)?)?;
+    let input_skeleton = Skeleton::read_from_model(File::open(input_model_path).context("Input model")?)?;
+    let output_skeleton = Skeleton::read_from_model(File::open(output_model_path).context("Output model")?)?;
 
     let mapping = schema.get_mapping(input_skeleton.character_id, output_skeleton.character_id)?;
 
-    let input_animation = Animation::read(File::open(input_animation_path)?, &input_skeleton)?;
+    let input_animation = Animation::read(File::open(input_animation_path).context("Input animation")?, &input_skeleton)?;
 
     let mut converter = AnimationConverter::new(mapping, input_animation);
     if let Some(reference_animation_path) = reference_animation_path {
