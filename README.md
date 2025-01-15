@@ -27,11 +27,13 @@ sh2-anim-converter -a data/chr2/mar/xmar_wpcolt.anm data/chr/jms/hll_jms.mdl dat
 * `data/chr2/mar/xmar_wphand.anm`: Path to write the converted animation that can be used by the output character. Will
   be created if it doesn't exist.
 
+Note that when converting Maria's animations to James, you need to truncate her animation at the reference animation
+offset (see [Schema/Characters](#characters)) prior to conversion; the tool doesn't do this automatically yet.
+
 ## Schema
 
-The schema, in schema.toml, describes how to map one character's skeleton to another. Currently only a mapping from
-James to Maria is provided; I expect to add the reverse mapping shortly. There are only two top-level keys, `characters`
-and `mappings`.
+The schema, in schema.toml, describes how to map one character's skeleton to another. Only mappings between James and
+Maria are provided. There are only two top-level keys, `characters` and `mappings`.
 
 ### characters
 
