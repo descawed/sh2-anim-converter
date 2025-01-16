@@ -639,7 +639,7 @@ impl BinWrite for TransformBlock {
 #[derive(Debug)]
 pub struct Animation {
     skeleton: Vec<Option<usize>>,
-    skeleton_translation_lengths: Vec<f32>,
+    skeleton_transforms: Vec<(Rot3, Vec3)>,
     frames: Vec<Vec<(bool, Transform)>>,
 }
 
@@ -676,9 +676,21 @@ impl Animation {
             }
         }
 
+        let mut transforms = Vec::with_capacity(num_bones);
+        for i in 0..num_bones {
+            let transform = skeleton.get_relative_transform(i);
+            let rotation = Rot3::from_matrix(&Mat3::new(
+                transform.m11, transform.m12, transform.m13,
+                transform.m21, transform.m22, transform.m23,
+                transform.m31, transform.m32, transform.m33,
+            ));
+            let translation = Vec3::new(transform.m14, transform.m24, transform.m34);
+            transforms.push((rotation, translation));
+        }
+
         Ok(Self {
             skeleton: hierarchy,
-            skeleton_translation_lengths: skeleton.get_translation_lengths(),
+            skeleton_transforms: transforms,
             frames,
         })
     }
@@ -705,7 +717,7 @@ impl Animation {
         }
     }
 
-    pub fn write_for_skeleton(&self, skeleton: &Skeleton, mapping: &[Option<usize>], use_model_translations: bool, mut f: impl Write + Seek) -> Result<()> {
+    pub fn write_for_skeleton(&self, skeleton: &Skeleton, mapping: &[Option<usize>], use_model_transforms: bool, mut f: impl Write + Seek) -> Result<()> {
         let mut is_mapped = vec![false; self.skeleton.len()];
         for mapped_index in mapping {
             if let Some(index) = mapped_index {
@@ -717,11 +729,17 @@ impl Animation {
         let num_mapped_bones = skeleton.num_bones();
         let frame_size = num_mapped_bones.div_ceil(BLOCK_SIZE) * BLOCK_SIZE;
 
-        let mut default_translations = Vec::with_capacity(num_mapped_bones);
-        if use_model_translations {
+        let mut default_transforms = Vec::with_capacity(num_mapped_bones);
+        if use_model_transforms {
             for i in 0..num_mapped_bones {
                 let transform = skeleton.get_relative_transform(i);
-                default_translations.push(Vec3::new(transform.m14, transform.m24, transform.m34));
+                let rotation = Rot3::from_matrix(&Mat3::new(
+                    transform.m11, transform.m12, transform.m13,
+                    transform.m21, transform.m22, transform.m23,
+                    transform.m31, transform.m32, transform.m33,
+                ));
+                let translation = Vec3::new(transform.m14, transform.m24, transform.m34);
+                default_transforms.push((rotation, translation));
             }
         }
 
@@ -735,31 +753,39 @@ impl Animation {
                         input_transform = input_transform.to_root();
                     }
 
-                    let (start_scale, end_scale) = if use_model_translations {
+                    if use_model_transforms {
                         // instead of using the translation from the input animation, which is likely
                         // not appropriate for the proportions of the output body, we'll use
+                        // FIXME: make this work with composition logic
+                        let rotation = input_transform.rotation();
                         let translation_start = input_transform.translation_start();
                         let translation_end = input_transform.translation_end();
 
-                        let reference_length = self.skeleton_translation_lengths[*input_index];
-                        (translation_start.norm() / reference_length, translation_end.norm() / reference_length)
+                        let (_default_input_rotation, default_input_translation) = &self.skeleton_transforms[*input_index];
+                        let default_input_length = default_input_translation.norm();
+                        let rel_trans_start = (translation_start - default_input_translation) / default_input_length;
+                        let rel_trans_end = (translation_end - default_input_translation) / default_input_length;
+
+                        //let rel_rotation = rotation * default_input_rotation.inverse();
+
+                        let (_default_output_rotation, default_output_translation) = &default_transforms[output_index];
+                        let default_output_length = default_output_translation.norm();
+                        let final_trans_start = default_output_translation + rel_trans_start * default_output_length;
+                        let final_trans_end = default_output_translation + rel_trans_end * default_output_length;
+                        // some things look better with this relative rotation but other things look worse. I'm going to keep the
+                        // rotation as is and just use the relative translation for now.
+                        //let final_rotation = rel_rotation * default_output_rotation;
+                        input_transform.set_transform(&rotation, &final_trans_start, &final_trans_end);
                     } else {
-                        (1.0, 1.0)
-                    };
-
-                    if let Some(input_parent) = self.skeleton[*input_index] {
-                        if !is_mapped[input_parent] {
-                            // the input bone's parent isn't mapped. compose the transformations
-                            // between it and its highest mapped parent.
-                            let (parent_rotation, parent_translation_start, parent_translation_end) = self.compose_transform(input_parent, input_frame.as_slice(), is_mapped.as_slice());
-                            input_transform.rotate(&parent_rotation);
-                            input_transform.translate(&parent_translation_start, &parent_translation_end);
+                        if let Some(input_parent) = self.skeleton[*input_index] {
+                            if !is_mapped[input_parent] {
+                                // the input bone's parent isn't mapped. compose the transformations
+                                // between it and its highest mapped parent.
+                                let (parent_rotation, parent_translation_start, parent_translation_end) = self.compose_transform(input_parent, input_frame.as_slice(), is_mapped.as_slice());
+                                input_transform.rotate(&parent_rotation);
+                                input_transform.translate(&parent_translation_start, &parent_translation_end);
+                            }
                         }
-                    }
-
-                    if use_model_translations {
-                        let default_translation = &default_translations[output_index];
-                        input_transform.set_translation(&(default_translation * start_scale), &(default_translation * end_scale));
                     }
 
                     (transform_flag, input_transform)

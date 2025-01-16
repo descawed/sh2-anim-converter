@@ -21,7 +21,7 @@ fn main() -> Result<()> {
                 .value_parser(value_parser!(PathBuf))
         )
         .arg(
-            arg!(-t --"model-translation" "Instead of using the translations from the input animation directly, use translations from the output model, scaled based on the magnitude of the animation translations. This can help avoid distorted proportions when characters are different sizes.")
+            arg!(-t --"model-transform" "Instead of using the transforms from the input animation directly, use transforms relative to the output model. This can help avoid distorted proportions when characters are different sizes.")
                 .action(ArgAction::SetTrue)
         )
         .arg(arg!(<INPUT_MODEL> "The model file for the character whose animation will be converted.").value_parser(value_parser!(PathBuf)))
@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     let input_animation_path = matches.get_one::<PathBuf>("INPUT_FILE").unwrap();
     let output_model_path = matches.get_one::<PathBuf>("OUTPUT_MODEL").unwrap();
     let output_animation_path = matches.get_one::<PathBuf>("OUTPUT_FILE").unwrap();
-    let use_model_translations = matches.get_flag("model-translation");
+    let use_model_transforms = matches.get_flag("model-transform");
 
     let schema = Schema::load(schema_path).context("schema.toml")?;
 
@@ -52,5 +52,5 @@ fn main() -> Result<()> {
     if let Some(reference_animation_path) = reference_animation_path {
         converter.load_reference_animation(reference_animation_path)?;
     }
-    converter.convert(&output_skeleton, output_animation_path, use_model_translations)
+    converter.convert(&output_skeleton, output_animation_path, use_model_transforms)
 }
