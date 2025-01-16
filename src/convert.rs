@@ -48,9 +48,9 @@ impl AnimationConverter {
         Ok(())
     }
 
-    pub fn convert(&self, output_skeleton: &Skeleton, output_path: &Path) -> Result<()> {
+    pub fn convert(&self, output_skeleton: &Skeleton, output_path: &Path, use_model_translations: bool) -> Result<()> {
         let mut file = File::create(output_path)?;
-        self.input_animation.write_for_skeleton(output_skeleton, self.mapping.skeleton_mapping.as_slice(), &mut file)?;
+        self.input_animation.write_for_skeleton(output_skeleton, self.mapping.skeleton_mapping.as_slice(), use_model_translations, &mut file)?;
         file.write_all(&self.reference_animation_data)?;
 
         Ok(())

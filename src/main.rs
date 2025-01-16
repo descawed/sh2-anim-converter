@@ -2,7 +2,7 @@ use std::fs::File;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::{arg, command, value_parser};
+use clap::{arg, command, value_parser, ArgAction};
 
 use sh2_anim_converter::animation::Animation;
 use sh2_anim_converter::convert::AnimationConverter;
@@ -20,6 +20,10 @@ fn main() -> Result<()> {
             arg!(-a --"reference-animation" <REFERENCE_ANIMATION> "An animation file for the output character to use as a reference for the output animation. This may be required depending on the character; some characters require data from an existing animation.")
                 .value_parser(value_parser!(PathBuf))
         )
+        .arg(
+            arg!(-t --"model-translation" "Instead of using the translations from the input animation directly, use translations from the output model, scaled based on the magnitude of the animation translations. This can help avoid distorted proportions when characters are different sizes.")
+                .action(ArgAction::SetTrue)
+        )
         .arg(arg!(<INPUT_MODEL> "The model file for the character whose animation will be converted.").value_parser(value_parser!(PathBuf)))
         .arg(arg!(<INPUT_FILE> "The animation file to convert.").value_parser(value_parser!(PathBuf)).value_parser(value_parser!(PathBuf)))
         .arg(arg!(<OUTPUT_MODEL> "The model file for the character to convert the animation to.").value_parser(value_parser!(PathBuf)))
@@ -33,6 +37,7 @@ fn main() -> Result<()> {
     let input_animation_path = matches.get_one::<PathBuf>("INPUT_FILE").unwrap();
     let output_model_path = matches.get_one::<PathBuf>("OUTPUT_MODEL").unwrap();
     let output_animation_path = matches.get_one::<PathBuf>("OUTPUT_FILE").unwrap();
+    let use_model_translations = matches.get_flag("model-translation");
 
     let schema = Schema::load(schema_path).context("schema.toml")?;
 
@@ -47,5 +52,5 @@ fn main() -> Result<()> {
     if let Some(reference_animation_path) = reference_animation_path {
         converter.load_reference_animation(reference_animation_path)?;
     }
-    converter.convert(&output_skeleton, output_animation_path)
+    converter.convert(&output_skeleton, output_animation_path, use_model_translations)
 }

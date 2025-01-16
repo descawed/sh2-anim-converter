@@ -423,15 +423,7 @@ impl Transform {
         self.set_transform(&new_rotation, &new_translation_start, &new_translation_end);
     }
 
-    pub fn translate(&mut self, translation_start: &Vec3, translation_end: &Vec3) {
-        if self.is_empty() {
-            return;
-        }
-
-        let rotation = self.rotation();
-        let new_translation_start = self.translation_start() + (rotation * translation_start);
-        let new_translation_end = self.translation_end() + (rotation * translation_end);
-
+    pub fn set_translation(&mut self, new_translation_start: &Vec3, new_translation_end: &Vec3) {
         match self {
             Self::IsometryFloat32 { translation, .. } => {
                 *translation = new_translation_end.into();
@@ -458,6 +450,18 @@ impl Transform {
             }
             _ => (),
         }
+    }
+
+    pub fn translate(&mut self, translation_start: &Vec3, translation_end: &Vec3) {
+        if self.is_empty() {
+            return;
+        }
+
+        let rotation = self.rotation();
+        let new_translation_start = self.translation_start() + (rotation * translation_start);
+        let new_translation_end = self.translation_end() + (rotation * translation_end);
+
+        self.set_translation(&new_translation_start, &new_translation_end);
     }
 
     pub const fn is_none(&self) -> bool {
@@ -635,6 +639,7 @@ impl BinWrite for TransformBlock {
 #[derive(Debug)]
 pub struct Animation {
     skeleton: Vec<Option<usize>>,
+    skeleton_translation_lengths: Vec<f32>,
     frames: Vec<Vec<(bool, Transform)>>,
 }
 
@@ -673,6 +678,7 @@ impl Animation {
 
         Ok(Self {
             skeleton: hierarchy,
+            skeleton_translation_lengths: skeleton.get_translation_lengths(),
             frames,
         })
     }
@@ -699,7 +705,7 @@ impl Animation {
         }
     }
 
-    pub fn write_for_skeleton(&self, skeleton: &Skeleton, mapping: &[Option<usize>], mut f: impl Write + Seek) -> Result<()> {
+    pub fn write_for_skeleton(&self, skeleton: &Skeleton, mapping: &[Option<usize>], use_model_translations: bool, mut f: impl Write + Seek) -> Result<()> {
         let mut is_mapped = vec![false; self.skeleton.len()];
         for mapped_index in mapping {
             if let Some(index) = mapped_index {
@@ -711,6 +717,14 @@ impl Animation {
         let num_mapped_bones = skeleton.num_bones();
         let frame_size = num_mapped_bones.div_ceil(BLOCK_SIZE) * BLOCK_SIZE;
 
+        let mut default_translations = Vec::with_capacity(num_mapped_bones);
+        if use_model_translations {
+            for i in 0..num_mapped_bones {
+                let transform = skeleton.get_relative_transform(i);
+                default_translations.push(Vec3::new(transform.m14, transform.m24, transform.m34));
+            }
+        }
+
         for input_frame in &self.frames {
             let mut output_frame = Vec::with_capacity(frame_size);
             for (output_index, input_index) in mapping.iter().enumerate() {
@@ -721,6 +735,18 @@ impl Animation {
                         input_transform = input_transform.to_root();
                     }
 
+                    let (start_scale, end_scale) = if use_model_translations {
+                        // instead of using the translation from the input animation, which is likely
+                        // not appropriate for the proportions of the output body, we'll use
+                        let translation_start = input_transform.translation_start();
+                        let translation_end = input_transform.translation_end();
+
+                        let reference_length = self.skeleton_translation_lengths[*input_index];
+                        (translation_start.norm() / reference_length, translation_end.norm() / reference_length)
+                    } else {
+                        (1.0, 1.0)
+                    };
+
                     if let Some(input_parent) = self.skeleton[*input_index] {
                         if !is_mapped[input_parent] {
                             // the input bone's parent isn't mapped. compose the transformations
@@ -729,6 +755,11 @@ impl Animation {
                             input_transform.rotate(&parent_rotation);
                             input_transform.translate(&parent_translation_start, &parent_translation_end);
                         }
+                    }
+
+                    if use_model_translations {
+                        let default_translation = &default_translations[output_index];
+                        input_transform.set_translation(&(default_translation * start_scale), &(default_translation * end_scale));
                     }
 
                     (transform_flag, input_transform)

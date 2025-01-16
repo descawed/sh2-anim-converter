@@ -2,11 +2,12 @@ use std::io::{Read, Seek, SeekFrom};
 
 use anyhow::{bail, Result};
 use binrw::BinReaderExt;
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector3};
 
 const MODEL_MAGIC: u32 = 0xFFFF0003;
 
 pub type Mat4 = Matrix4<f32>;
+pub type Vec3 = Vector3<f32>;
 
 #[derive(Debug, Clone)]
 pub struct Skeleton {
@@ -89,5 +90,16 @@ impl Skeleton {
             Some(parent_id) => self.get_transform_relative_to(bone_id, parent_id),
             None => self.default_transforms.get(bone_id).cloned().unwrap_or_default(),
         }
+    }
+
+    pub fn get_translation_lengths(&self) -> Vec<f32> {
+        let mut translation_lengths = Vec::with_capacity(self.num_bones());
+        for i in 0..self.num_bones() {
+            let transform = self.get_relative_transform(i);
+            let translation = Vec3::new(transform.m14, transform.m24, transform.m34);
+            translation_lengths.push(translation.norm());
+        }
+
+        translation_lengths
     }
 }
